@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Census: The Great Population Count</title>
+    <style>
+        body {
+            background: #000;
+            color: #00ff00;
+            font-family: monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        #game {
+            width: 80%;
+            max-width: 800px;
+        }
+        #output {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #00ff00;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        #input {
+            width: 100%;
+            background: #000;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+            padding: 5px;
+            font-family: monospace;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="score">People Counted: 0</div>
+    <div id="game">
+        <div id="output"></div>
+        <input id="input" type="text" autofocus>
+    </div>
+
+    <script>
+        const output = document.getElementById('output');
+        const input = document.getElementById('input');
+        const scoreDisplay = document.getElementById('score');
+        let score = 0;
+        let inventory = [];
+        let currentRoom = 'office';
+        let riddleAnswered = false;
+
+        // Game world
+        const rooms = {
+            office: {
+                description: "You are in a cramped Census Bureau office. Papers are everywhere. Exits lead north to the village and east to the forest.",
+                exits: { north: 'village', east: 'forest' },
+                items: ['clipboard'],
+                people: []
+            },
+            village: {
+                description: "A quiet village square. A farmer stands here, eyeing you suspiciously. South leads back to the office, west to a farm, north to a tavern.",
+                exits: { south: 'office', west: 'farm', north: 'tavern' },
+                items: [],
+                people: ['farmer']
+            },
+            farm: {
+                description: "A muddy farm. A sheep stares at you, but there’s a shepherd hiding behind a hay bale. East goes back to the village, south to the riverbank.",
+                exits: { east: 'village', south: 'riverbank' },
+                items: [],
+                people: ['shepherd']
+            },
+            forest: {
+                description: "A dark forest. A hermit lurks in the shadows, muttering about tax evasion. West returns to the office, east to the cave.",
+                exits: { west: 'office', east: 'cave' },
+                items: ['budget-cut-notice'],
+                people: ['hermit']
+            },
+            riverbank: {
+                description: "A serene riverbank. A fisherman is casting a line into the water. North leads back to the farm.",
+                exits: { north: 'farm' },
+                items: ['fishing-net'],
+                people: ['fisherman']
+            },
+            tavern: {
+                description: "A noisy tavern filled with chatter. A barkeep is wiping down the counter. South goes back to the village.",
+                exits: { south: 'village' },
+                items: [],
+                people: ['barkeep']
+            },
+            cave: {
+                description: "A damp cave. A riddlemaster blocks the path north, demanding an answer. West leads back to the forest, north to the treasure room (if you pass).",
+                exits: { west: 'forest', north: 'treasure_room' },
+                items: [],
+                people: ['riddlemaster']
+            },
+            treasure_room: {
+                description: "A glittering treasure room. A treasurer counts coins obsessively. South leads back to the cave.",
+                exits: { south: 'cave' },
+                items: ['golden-coin'],
+                people: ['treasurer']
+            }
+        };
+
+        // Initial message
+        print("Welcome, Rhett, to *Census: The Great Population Count*. Your job: count every soul in Quantidor. Type 'help' for commands.");
+        look();
+
+        // Handle input
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const command = input.value.trim().toLowerCase();
+                input.value = '';
+                processCommand(command);
+            }
+        });
+
+        function print(text) {
+            output.innerHTML += `${text}<br>`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function look() {
+            const room = rooms[currentRoom];
+            print(room.description);
+            if (room.items.length) print(`Items here: ${room.items.join(', ')}`);
+            if (room.people.length) print(`People here: ${room.people.join(', ')}`);
+            if (currentRoom === 'cave' && !riddleAnswered) {
+                print("The riddlemaster asks: 'I speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?'");
+                print("Type 'answer [your answer]' to respond.");
+            }
+        }
+
+        function processCommand(command) {
+            print(`> ${command}`);
+            const [verb, ...rest] = command.split(' ');
+            const noun = rest.join(' ');
+
+            if (command === 'help') {
+                print("Commands: north, south, east, west, look, take [item], count [person], answer [riddle answer], inventory");
+            } else if (['north', 'south', 'east', 'west'].includes(verb)) {
+                move(verb);
+            } else if (verb === 'look') {
+                look();
+            } else if (verb === 'take' && noun) {
+                take(noun);
+            } else if (verb === 'count' && noun) {
+                count(noun);
+            } else if (verb === 'answer' && noun) {
+                answerRiddle(noun);
+            } else if (verb === 'inventory' || verb === 'i') {
+                print(`Inventory: ${inventory.length ? inventory.join(', ') : 'nothing'}`);
+            } else {
+                print("I don’t understand that. Try 'help' for commands.");
+            }
+        }
+
+        function move(direction) {
+            const room = rooms[currentRoom];
+            if (room.exits[direction]) {
+                if (currentRoom === 'cave' && direction === 'north' && !riddleAnswered) {
+                    print("The riddlemaster blocks your path! Answer the riddle first.");
+                    return;
+                }
+                currentRoom = room.exits[direction];
+                if (currentRoom === 'forest' && !inventory.includes('clipboard')) {
+                    print("You stumble into the forest without your clipboard. A budget cut swallows you whole! Game over.");
+                    input.disabled = true;
+                } else {
+                    look();
+                }
+            } else {
+                print("You can’t go that way!");
+            }
+        }
+
+        function take(item) {
+            const room = rooms[currentRoom];
+            const index = room.items.indexOf(item);
+            if (index !== -1) {
+                room.items.splice(index, 1);
+                inventory.push(item);
+                print(`Taken: ${item}`);
+            } else {
+                print("That’s not here!");
+            }
+        }
+
+        function count(person) {
+            const room = rooms[currentRoom];
+            const index = room.people.indexOf(person);
+            if (index !== -1) {
+                if (!inventory.includes('clipboard')) {
+                    print("You need a clipboard to count people properly!");
+                } else if (person === 'riddlemaster' && !riddleAnswered) {
+                    print("The riddlemaster refuses to be counted until you answer the riddle!");
+                } else {
+                    room.people.splice(index, 1);
+                    score += 1;
+                    scoreDisplay.textContent = `People Counted: ${score}`;
+                    print(`You count ${person}. One more for the records!`);
+                    if (score === 7) {
+                        print("You’ve counted everyone! The Census Bureau grudgingly approves. Victory!");
+                        input.disabled = true;
+                    }
+                }
+            } else {
+                print("No such person here!");
+            }
+        }
+
+        function answerRiddle(answer) {
+            if (currentRoom === 'cave') {
+                if (answer === 'echo') {
+                    print("The riddlemaster nods. 'Clever. You may pass.'");
+                    riddleAnswered = true;
+                } else {
+                    print("The riddlemaster shakes their head. 'Wrong. Try again.'");
+                }
+            } else {
+                print("There’s no riddle to answer here!");
+            }
+        }
+    </script>
+</body>
+</html>
